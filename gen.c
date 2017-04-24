@@ -23,8 +23,10 @@ const char* hex_chars[]={"",
                          "01234567890abcdef",
                          "01234567890ABCDEF",
                          "01234567890ABCDEFabcdef"};
-const char* special_chars="+-=_@#$%^&;:,.<>()[]/~\\";
-const char* hard_to_read_chars="0Oo1lI|B85Ss2Z$!()[]/\\,.;:-~_";
+
+// use all special characgers on engligh keyboard?
+const char* special_chars="`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?";
+const char* hard_to_read_chars="0Oo1lIB85Ss2Z`~!$^*()-_[{]}\\/|;:'\",<.>";
 
 typedef struct _CONFIG {
     int password_length;
@@ -52,6 +54,7 @@ void class_count_argv(CONFIG* config,char* argv,int* min,int* max);
 void print_char_count(char* desc,int min,int max);
 char* plimit(char* b,size_t s,int min,int max);
 void strrmchars(char* st,char* deletes);
+void strrmcharsnot(char* st,char* mustbe);
 void strrmdups(char* st);
 
 //
@@ -183,12 +186,22 @@ continue1:
         if(config.exclude_hard_to_reads)
             strrmchars(char_pool,(char*)hard_to_read_chars);
     }
-    if(config.custom_exclude_chars)
+    if(config.custom_exclude_chars) {
         strrmchars(char_pool,config.custom_exclude_chars);
+    }
+
+    if (config.first_must_be_chars) {
+        strrmdups(config.first_must_be_chars);
+        strrmcharsnot(config.first_must_be_chars,char_pool);
+        l=strlen(config.first_must_be_chars);
+        if(!l) usage(&config);
+    }
+
     strrmdups(char_pool);
     l=strlen(char_pool);
     if(!l) usage(&config);
-    ceil=UINT_MAX-(UINT_MAX%l)-1;
+
+    ceil = UINT_MAX - (UINT_MAX % l) - 1;
 
     if(config.verbose) {
         int entropy_bits;
@@ -384,6 +397,14 @@ get_rc_options(CONFIG* config) {
                 if((token=strsep(&pb,delims))==NULL) usage(config);
                 config->custom_chars=strdup(token);
                 break;
+            case 'e':
+                if((token=strsep(&pb,delims))==NULL) usage(config);
+                config->custom_exclude_chars=strdup(token);
+                break;
+            case 'f':
+                if((token=strsep(&pb,delims))==NULL) usage(config);
+                config->first_must_be_chars=strdup(token);
+                break;
             default:
                 usage(config);
             }
@@ -531,6 +552,22 @@ strrmchars(char* st,char* deletes) {
     char* p2;
     for(p1=st,p2=st; *p1; p1++) {
         if(!strchr(deletes,*p1)) {
+            *p2++=*p1;
+        }
+    }
+    *p2=0;
+}
+
+//
+// delete characters not in a pool
+//
+
+void
+strrmcharsnot(char* st,char* mustbe) {
+    char* p1;
+    char* p2;
+    for(p1=st,p2=st; *p1; p1++) {
+        if(strchr(mustbe,*p1)) {
             *p2++=*p1;
         }
     }
