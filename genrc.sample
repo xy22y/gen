@@ -1,0 +1,14 @@
+# this configuration generates passwords with 256 bits of entropy
+-u -   # requirements for upper case letters [lowcount]-[highcount]
+       #                                     dash alone means don't care
+-l -   # "            "   lower case letters
+-n -   # "            "   number characters
+-s -   # "            "   special characters
+-L 40  # "            "   password length
+# -x [n]                                    # hex characters only
+#                                           #   (1=lower,2=upper,3=mixed)
+# -c                                        # exclude hard-to-read characters
+# -p abcdefghijlkmnopqrstuvwxyz0123456789   # explicit character pool
+# -e $%                                     # explicit exclude pool
+# -f abcdefghijklmnopqrstuvwxyz             # first char must be
+# -v                                        # verbose output
