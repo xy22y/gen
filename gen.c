@@ -30,6 +30,7 @@ const char* hard_to_read_chars="0Oo1lIB85Ss2Z`~!$^*()-_[{]}\\/|;:'\",<.>";
 
 typedef struct _CONFIG {
     int password_length;
+    int password_strength;
     int verbose;
     int exclude_hard_to_reads;
     int hex_only; // 0=no 1=lower 2=upper 3=both
@@ -45,6 +46,7 @@ typedef struct _CONFIG {
 
     char* custom_chars;
     char* custom_exclude_chars;
+    char* custom_additional_chars;
     char* first_must_be_chars;
 } CONFIG;
 
@@ -64,7 +66,7 @@ void strrmdups(char* st);
 int
 main(int argc,char** argv) {
     unsigned int tmp;
-    unsigned int ceil;
+    unsigned int ceiling;
     int l;
     int c;
     int m;
@@ -74,11 +76,12 @@ main(int argc,char** argv) {
     int count_number_chars=0;
     int count_special_chars=0;
     char char_pool[257];
-    char password[257];
+    char* password;
 
     // default options
     CONFIG config={
         20, // paswword_length
+        0,  // password_strength
         0,  // verbose
         0,  // exclude_hard_to_reads
         0,  // hex_only
@@ -94,6 +97,7 @@ main(int argc,char** argv) {
 
         NULL, // custom_chars
         NULL, // custom_exclude_chars
+        NULL, // custom_additional_chars
         NULL, // first_must_be_chars
     };
 
@@ -135,6 +139,12 @@ main(int argc,char** argv) {
         case 'L':
             ++argv;--argc;
             config.password_length=atoi(*argv);
+            config.password_strength=0; // overridden by presence of -L
+            break;
+        case 'b':
+            ++argv;--argc;
+            config.password_strength=atoi(*argv);
+            config.password_length=0; // overridden by presence of -b
             break;
         case 'x':
             ++argv;--argc;
@@ -158,6 +168,11 @@ main(int argc,char** argv) {
             ++argv;--argc;
             if(*argv==NULL) usage(&config);
             config.custom_exclude_chars=strdup(*argv);
+            break;
+        case 'a':
+            ++argv;--argc;
+            if(*argv==NULL) usage(&config);
+            config.custom_additional_chars=strdup(*argv);
             break;
         case 'f':
             ++argv;--argc;
@@ -186,6 +201,9 @@ continue1:
         if(config.exclude_hard_to_reads)
             strrmchars(char_pool,(char*)hard_to_read_chars);
     }
+    if(config.custom_additional_chars) {
+        strcat(char_pool,config.custom_additional_chars);
+    }
     if(config.custom_exclude_chars) {
         strrmchars(char_pool,config.custom_exclude_chars);
     }
@@ -201,7 +219,10 @@ continue1:
     l=strlen(char_pool);
     if(!l) usage(&config);
 
-    ceil = UINT_MAX - (UINT_MAX % l) - 1;
+    ceiling = UINT_MAX - (UINT_MAX % l) - 1;
+    if(config.password_strength>0) {
+        config.password_length = ceil(config.password_strength/(log(l)/log(2)));
+    }
 
     if(config.verbose) {
         int entropy_bits;
@@ -222,6 +243,9 @@ continue1:
         printf("Exclude explicitly.......: %s\n",
                config.custom_exclude_chars ?
                    config.custom_exclude_chars : "nothing");
+        printf("Additional characters....: %s\n",
+               config.custom_additional_chars ?
+                   config.custom_additional_chars : "none");
         printf("%s.: %s\n",
                config.custom_chars ?
                    "Explicit character pool." : "Resulting character pool",
@@ -230,10 +254,18 @@ continue1:
                config.first_must_be_chars ?
                    config.first_must_be_chars : "no restriction");
         printf("Length of character pool.: %d\n",l);
-        printf("Randomizer ceiling.......: %x (%u)\n",ceil,ceil);
-        printf("Password length requested: %d\n",config.password_length);
+        printf("Randomizer ceiling.......: %x (%u)\n",ceiling,ceiling);
+        if (config.password_strength) {
+            printf("Strength requested.......: %d bits or better\n",
+                   config.password_strength);
+            printf("Resulting password length: %d characters\n",
+                   config.password_length);
+        } else {
+            printf("Password length requested: %d characters\n",
+                   config.password_length);
+        }
         entropy_bits=config.password_length*log(l)/log(2);
-        printf("Entropy..................: %d bits\n",entropy_bits);
+        printf("Entropy equivalent.......: %d bits\n",entropy_bits);
         printf("Generated password.......: ");
     }
 
@@ -242,11 +274,12 @@ continue1:
         count_upper_case_chars=0;
         count_number_chars=0;
         count_special_chars=0;
-        memset(password,0,sizeof(password));
+        password=malloc(config.password_length+1);
+        memset(password,0,config.password_length+1);
         p=password;
         for(;; ) {
             getentropy((void*)&tmp,sizeof(tmp));
-            if(tmp>ceil) continue;
+            if(tmp>ceiling) continue;
             m=tmp%l;
             c=char_pool[m];
 
@@ -387,6 +420,10 @@ get_rc_options(CONFIG* config) {
                 if((token=strsep(&pb,delims))==NULL) usage(config);
                 config->password_length=atoi(token);
                 break;
+            case 'b':
+                if((token=strsep(&pb,delims))==NULL) usage(config);
+                config->password_strength=atoi(token);
+                break;
             case 'x':
                 if((token=strsep(&pb,delims))==NULL)
                     config->hex_only=1;
@@ -400,6 +437,10 @@ get_rc_options(CONFIG* config) {
             case 'e':
                 if((token=strsep(&pb,delims))==NULL) usage(config);
                 config->custom_exclude_chars=strdup(token);
+                break;
+            case 'a':
+                if((token=strsep(&pb,delims))==NULL) usage(config);
+                config->custom_additional_chars=strdup(token);
                 break;
             case 'f':
                 if((token=strsep(&pb,delims))==NULL) usage(config);
@@ -436,11 +477,13 @@ usage(CONFIG* config) {
            "    -l [count-spec]: specify number of lower case characters (default=%s)\n"
            "    -n [count-spec]: specify number of numeric characters (default=%s)\n"
            "    -s [count-spec]: specify number of special characters (default=%s)\n"
-           "    -L: specify password length (default=%d)\n"
+           "    -L: specify password length in characters (default=%d)\n"
+           "    -b: specify password strength in bits (overrides -L) (default=%d)\n"
            "    -x: hex characters only: 0=no, 1(default)=lower, 2=upper, 3=both (default=%d)\n"
            "    -c: exclude hard-to-read characters from password (like 0 and O) (default=%s)\n"
            "    -p <chars>: specify a custom character pool (default=%s)\n"
            "    -e <chars>: specify a custom set of exclude characters (default=%s)\n"
+           "    -a <chars>: specify a custom set of additional characters (default=%s)\n"
            "    -f <chars>: specify requirements for first character (default=%s)\n"
            "    -v: show verbose output\n"
            "\nNote:\n"
@@ -450,11 +493,14 @@ usage(CONFIG* config) {
            pnumber,
            pspecial,
            config->password_length,
+           config->password_strength,
            config->hex_only,
            (config->exclude_hard_to_reads ? "yes" : "no"),
            (config->custom_chars ? config->custom_chars : "none"),
            (config->custom_exclude_chars ?
                config->custom_exclude_chars : "none"),
+           (config->custom_additional_chars ?
+               config->custom_additional_chars : "none"),
            (config->first_must_be_chars ?
                config->first_must_be_chars : "none")
            );

@@ -21,6 +21,6 @@ $(BIN):	$(OBJS) ## Build executable "$(BIN)"
 	$(CLINK) $(BIN) $(OBJS)
 
 help:   ## Show a list of targets
-	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 -include $(DEPS)
